@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cotality org chart</title>
+<style>
+:root{color-scheme:light;--bg:#f7f9fb;--card:#fff;--ink:#2b2f36;--mute:#6a7380;--line:#dbe3ec;--acc:#0b2a4a;--green:#1f9d63;--hit:#e6f0fa;--sel:#0b2a4a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+
+
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 "Segoe UI",system-ui,sans-serif}
+header{padding:14px 16px 12px;background:var(--acc);border-bottom:3px solid var(--green)}
+h1{font:600 20px/1.2 "Segoe UI",system-ui,sans-serif;letter-spacing:-.01em;margin:0 0 2px;color:#fff}
+.sub{color:var(--mute);font-size:13px}
+header .sub{color:#c9dcf0}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:8px 16px}
+.filters label{font-size:12px;color:var(--mute);display:flex;flex-direction:column;gap:3px}
+select,input,button{font:inherit;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+.bar{display:flex;gap:8px;padding:0 16px 8px;align-items:center;flex-wrap:wrap}
+button{cursor:pointer}button:hover{background:#e6f0fa}
+button:focus-visible,select:focus-visible,input:focus-visible,.node:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+#count{color:var(--mute);font-size:13px;margin-left:auto}
+.wrap{overflow-x:auto;padding:12px 16px 40px}
+.tree ul{list-style:none;margin:0;padding-left:22px;border-left:1px solid var(--line)}
+.tree>ul{border:0;padding:0}
+.tree li{margin:8px 0 0;position:relative}
+.tree li li::before{content:"";position:absolute;left:-22px;top:20px;width:20px;border-top:1px solid var(--line)}
+.node{display:inline-flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:220px;max-width:100%;cursor:pointer;text-align:left}
+.node:hover{border-color:#8fb0d3}
+.node.hit{background:var(--hit);border-color:var(--acc)}
+.node.dim{opacity:.45}
+.tog{width:18px;color:var(--green);font-weight:700;text-align:center}
+.nm{font-weight:600}.tt{font-size:12.5px;color:var(--mute)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;background:#8a948f}
+.Strong{background:#1f9d63}.Neutral{background:#9aa5b1}.New{background:#4a90d9}.Strained{background:#d9534f}
+#detail{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:12px 16px;display:none}
+#detail.on{display:block}
+.chip{display:inline-block;background:var(--hit);border:1px solid #c5dbf2;color:var(--acc);border-radius:12px;padding:1px 8px;margin:2px 4px 0 0;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+<h1>Cotality org chart</h1>
+<div class="sub" id="note"></div>
+</header>
+<div class="filters">
+<label>Search<input id="q" placeholder="Name"></label>
+<label>Designation<select id="fTitle"></select></label>
+<label>Department<select id="fDept"></select></label>
+<label>Project<select id="fProj"></select></label>
+<label>Relationship<select id="fRel"></select></label>
+</div>
+<div class="bar">
+<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="only" style="padding:0"> Show matches only</label>
+<button id="exp">Expand all</button><button id="col">Collapse all</button><button id="rst">Reset</button>
+<button id="add" hidden>Add person</button>
+<label id="imp" style="font-size:13px">Upload Excel/CSV <input type="file" id="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" style="max-width:190px"></label>
+<span id="count"></span>
+</div>
+<div id="report" class="sub" style="padding:0 16px 8px"></div>
+<div class="wrap"><div class="tree" id="tree"></div></div>
+<div id="form" style="display:none;padding:12px 16px;border-top:1px solid var(--line);background:var(--card)">
+<div class="filters" style="padding:0">
+<label>Name<input id="eName"></label><label>Designation<input id="eTitle"></label><label>Department<input id="eDept"></label>
+<label>Reports to<select id="eMgr"></select></label>
+<label>Projects (comma separated)<input id="eProj"></label>
+<label>Relationship<select id="eRel"><option>Strong</option><option>Neutral</option><option>New</option><option>Strained</option></select></label></div>
+<div class="bar" style="padding:8px 0 0"><button id="eSave">Save</button><button id="eDel">Delete</button><button id="eCancel">Cancel</button></div></div>
+<div id="detail"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ---- EDIT THIS: one row per person. manager = id of boss (null for the top). ----
+// rel = your relationship with the person: Strong / Neutral / New / Strained
+let PEOPLE=[
+{id:1,name:"Alex Morgan",title:"CEO",dept:"Executive",manager:null,projects:[],rel:"Neutral"},
+{id:2,name:"Priya Nair",title:"CTO",dept:"Technology",manager:1,projects:["Platform Migration"],rel:"Strong"},
+{id:3,name:"Daniel Cho",title:"CFO",dept:"Finance",manager:1,projects:["Budget 2027"],rel:"Neutral"},
+{id:4,name:"Sara Lindqvist",title:"Chief Data Officer",dept:"Data",manager:1,projects:["Property Analytics","Platform Migration"],rel:"Strong"},
+{id:5,name:"Marcus Reed",title:"VP Engineering",dept:"Technology",manager:2,projects:["Platform Migration"],rel:"New"},
+{id:6,name:"Elena Park",title:"Director",dept:"Technology",manager:5,projects:["Platform Migration","API Revamp"],rel:"Strong"},
+{id:7,name:"Tom Becker",title:"Senior Engineer",dept:"Technology",manager:6,projects:["API Revamp"],rel:"Neutral"},
+{id:8,name:"Aisha Khan",title:"Engineer",dept:"Technology",manager:6,projects:["Platform Migration"],rel:"New"},
+{id:9,name:"Luis Ortega",title:"Director",dept:"Data",manager:4,projects:["Property Analytics"],rel:"Strained"},
+{id:10,name:"Mei Tanaka",title:"Senior Analyst",dept:"Data",manager:9,projects:["Property Analytics","Budget 2027"],rel:"Neutral"},
+{id:11,name:"Ravi Shah",title:"Analyst",dept:"Data",manager:9,projects:["Property Analytics"],rel:"Strong"},
+{id:12,name:"Hannah Cole",title:"Director",dept:"Finance",manager:3,projects:["Budget 2027"],rel:"Neutral"}
+];
+// ---------------------------------------------------------------------------------
+const $=id=>document.getElementById(id);
+let byId,kids,open;
+const flip=new Set();
+const uniq=a=>[...new Set(a)].sort();
+function fill(sel,label,vals){$(sel).innerHTML=`<option value="">All ${label}</option>`+vals.map(v=>`<option>${v}</option>`).join("")}
+function setup(data){
+PEOPLE=data.map(p=>({...p,id:String(p.id),manager:p.manager==null?null:String(p.manager),projects:p.projects||[]}));
+const idset=new Set(PEOPLE.map(p=>p.id));PEOPLE.forEach(p=>{if(p.manager&&!idset.has(p.manager))p.manager=null});
+byId={};kids={};
+PEOPLE.forEach(p=>{byId[p.id]=p;(kids[p.manager]=kids[p.manager]||[]).push(p)});
+open=new Set(PEOPLE.map(p=>p.id));
+fill("fTitle","designations",uniq(PEOPLE.map(p=>p.title)));
+fill("fDept","departments",uniq(PEOPLE.map(p=>p.dept)));
+fill("fProj","projects",uniq(PEOPLE.flatMap(p=>p.projects)));
+fill("fRel","relationships",uniq(PEOPLE.map(p=>p.rel)));
+$("detail").className="";}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function f(){return{q:$("q").value.trim().toLowerCase(),t:$("fTitle").value,d:$("fDept").value,p:$("fProj").value,r:$("fRel").value}}
+function match(p,s){
+return(!s.q||p.name.toLowerCase().includes(s.q))&&(!s.t||p.title===s.t)&&(!s.d||p.dept===s.d)&&(!s.p||p.projects.includes(s.p))&&(!s.r||p.rel===s.r)}
+// does this person or any descendant match?
+function subtreeHas(p,s){return match(p,s)||(kids[p.id]||[]).some(k=>subtreeHas(k,s))}
+function render(){
+const s=f(),active=!!(s.q||s.t||s.d||s.p||s.r),only=$("only").checked&&active;
+let hits=0;
+function build(p,under){
+const hit=active&&match(p,s);if(hit)hits++;
+const under2=under||hit;
+const ch=kids[p.id]||[];
+const vis=ch.filter(k=>!only||subtreeHas(k,s));
+const below=ch.some(k=>subtreeHas(k,s));
+const isOpen=active?((under2||below)!==flip.has(p.id)):open.has(p.id);
+const dim=active&&!hit?" dim":"";
+let h=`<li><div class="node${hit?" hit":""}${dim}" tabindex="0" data-id="${p.id}" role="button" aria-label="${esc(p.name)}, ${esc(p.title)}">`+
+`<span class="tog">${vis.length?(isOpen?"−":"+"):""}</span><span class="dot ${String(p.rel).replace(/\W/g,"")}" title="${p.rel}"></span>`+
+`<span><div class="nm">${esc(p.name)}</div><div class="tt">${esc(p.title)} · ${esc(p.dept)}</div></span></div>`;
+if(vis.length&&isOpen)h+="<ul>"+vis.map(c=>build(c,under2)).join("")+"</ul>";
+return h+"</li>"}
+const roots=kids[null]||[];
+$("tree").innerHTML="<ul>"+roots.filter(r=>!only||subtreeHas(r,s)).map(r=>build(r,false)).join("")+"</ul>";
+$("count").textContent=active?`${hits} match${hits===1?"":"es"} of ${PEOPLE.length}`:`${PEOPLE.length} people`;
+}
+function show(id){
+const p=byId[id],boss=byId[p.manager],n=(kids[id]||[]).length,d=$("detail");
+d.className="on";
+d.innerHTML=`<b>${esc(p.name)}</b> — ${esc(p.title)}, ${esc(p.dept)}<br><span class="tt">Reports to: ${boss?esc(boss.name):"—"} · Direct reports: ${n} · Relationship: ${p.rel}</span><br>`+
+(p.projects.length?p.projects.map(x=>`<span class="chip">${esc(x)}</span>`).join(""):'<span class="tt">No projects</span>')+(canWrite&&live?`<br><button onclick="editP('${p.id}')">Edit</button>`:"")}
+$("tree").addEventListener("click",e=>{
+const n=e.target.closest(".node");if(!n)return;
+const id=n.dataset.id;
+if((kids[id]||[]).length){const s=f();if(s.q||s.t||s.d||s.p||s.r){flip.has(id)?flip.delete(id):flip.add(id)}else{open.has(id)?open.delete(id):open.add(id)}}
+render();show(id)});
+$("tree").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.target.click()}});
+["q","fTitle","fDept","fProj","fRel","only"].forEach(i=>$(i).addEventListener("input",()=>{flip.clear();render()}));
+$("exp").onclick=()=>{PEOPLE.forEach(p=>open.add(p.id));render()};
+$("col").onclick=()=>{open.clear();render()};
+$("rst").onclick=()=>{flip.clear();["q","fTitle","fDept","fProj","fRel"].forEach(i=>$(i).value="");$("only").checked=false;$("detail").className="";PEOPLE.forEach(p=>open.add(p.id));render()};
+// Excel/CSV columns: Name, Title, Department, Manager (manager's name), Projects (comma separated), Relationship
+function fromRows(rows){
+const g=(r,k)=>{const key=Object.keys(r).find(x=>x.trim().toLowerCase()===k);return key?String(r[key]).replace(/\s+/g," ").trim():""};
+const list=rows.map((r,i)=>({id:i+1,name:g(r,"name"),title:g(r,"title")||g(r,"designation"),dept:g(r,"department")||g(r,"dept"),mgr:g(r,"manager"),projects:(g(r,"projects")||g(r,"project")).split(/[,;]/).map(x=>x.trim()).filter(Boolean),rel:g(r,"relationship")||"Neutral"})).filter(p=>p.name);
+const ids={};list.forEach(p=>ids[p.name.toLowerCase()]=p.id);
+list.forEach(p=>{p.manager=ids[p.mgr.toLowerCase()]||null;if(p.manager===p.id)p.manager=null});
+return list}
+function csvRows(t){const out=[];let row=[],c="",q=false;
+for(let i=0;i<t.length;i++){const ch=t[i];
+if(q){if(ch=='"'){if(t[i+1]=='"'){c+='"';i++}else q=false}else c+=ch}
+else if(ch=='"')q=true;
+else if(ch==","){row.push(c);c=""}
+else if(ch=="\n"||ch=="\r"){if(ch=="\r"&&t[i+1]=="\n")i++;row.push(c);out.push(row);row=[];c=""}
+else c+=ch}
+if(c||row.length){row.push(c);out.push(row)}
+const h=out.shift()||[];
+return out.filter(r=>r.some(x=>x.trim())).map(r=>Object.fromEntries(h.map((k,i)=>[k,r[i]||""])))}
+$("file").addEventListener("change",e=>{
+const fl=e.target.files[0];if(!fl)return;
+$("report").textContent="Reading "+fl.name+"...";
+const rd=new FileReader();
+rd.onload=()=>{try{
+let rows;
+if(window.XLSX){const wb=XLSX.read(rd.result,{type:"array"});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""})}
+else if(/\.csv$/i.test(fl.name)){rows=csvRows(new TextDecoder().decode(rd.result))}
+else{$("report").textContent="The Excel reader could not load (check your internet). Save the sheet as CSV and upload that instead.";return}
+const data=fromRows(rows);
+if(!data.length){$("report").textContent="No people found. Row 1 needs headers: Name, Designation, Department, Manager, Project, Relationship.";return}
+const depts=uniq(data.map(p=>p.dept).filter(Boolean)),projs=uniq(data.flatMap(p=>p.projects)),lost=data.filter(p=>p.mgr&&p.manager==null).map(p=>p.name+" (manager '"+p.mgr+"' not found)");
+$("report").innerHTML=`Read ${rows.length} rows: ${data.length} people, ${depts.length} departments, ${projs.length} projects.`+(lost.length?`<br>Not linked to a manager: ${lost.map(esc).join("; ")}`:"");
+saveAll(data);
+}catch(err){$("report").textContent="Could not read that file: "+(err.message||err)}};
+rd.onerror=()=>{$("report").textContent="Could not read the file from your device."};
+rd.readAsArrayBuffer(fl);e.target.value=""});
+// ---- Shared database (people collection) ----
+let canWrite=false,live=false,dbr=null,editing=null,importing=false;
+const SAMPLE=PEOPLE;
+async function saveAll(data){
+if(!dbr){setup(data);render();$("note").textContent="Loaded from your file (saved in this browser only)";try{localStorage.setItem("cotalityOrg",JSON.stringify(data))}catch(_){}return}
+try{
+const col=dbr.collection("people");
+importing=true;const old=await col.get();
+const keep=new Set(data.map(p=>"p"+p.id));
+for(const d of old.docs){if(!keep.has(d.id))await col.doc(d.id).delete()}
+const all=data.map(p=>({id:"p"+p.id,v:{name:p.name,title:p.title,dept:p.dept,manager:p.manager==null?null:"p"+p.manager,projects:p.projects,rel:p.rel}}));
+for(let i=0;i<all.length;i+=10){await Promise.all(all.slice(i,i+10).map(x=>col.doc(x.id).set(x.v)))}
+const fresh=await col.get();live=true;setup(fresh.docs.map(d=>({id:d.id,...d.data()})));render();$("note").textContent="Live shared data";
+}catch(e){$("report").innerHTML+="<br>Could not save to the shared database ("+esc(e.message||e.code||e)+"). Showing the file here only.";setup(data);render()}finally{importing=false}}
+function openForm(id){
+editing=id;
+const p=id?byId[id]:{name:"",title:"",dept:"",manager:null,projects:[],rel:"Neutral"};
+$("eMgr").innerHTML='<option value="">(none, top of chart)</option>'+(live?PEOPLE:[]).filter(x=>x.id!==id).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
+$("eName").value=p.name;$("eTitle").value=p.title;$("eDept").value=p.dept;$("eMgr").value=p.manager||"";$("eProj").value=p.projects.join(", ");$("eRel").value=p.rel;
+$("eDel").style.display=id?"":"none";
+$("form").style.display="block";$("form").scrollIntoView({block:"center"})}
+window.editP=openForm;
+$("add").onclick=()=>openForm(null);
+$("eCancel").onclick=()=>{$("form").style.display="none"};
+$("eSave").onclick=async()=>{
+const name=$("eName").value.trim();if(!name){alert("Enter a name.");return}
+const id=editing||"p"+Date.now();
+try{await dbr.collection("people").doc(id).set({name,title:$("eTitle").value.trim(),dept:$("eDept").value.trim(),manager:$("eMgr").value||null,projects:$("eProj").value.split(",").map(x=>x.trim()).filter(Boolean),rel:$("eRel").value});$("form").style.display="none"}
+catch(e){alert("Save failed: "+(e.message||e.code))}};
+$("eDel").onclick=async()=>{
+if(!confirm("Delete this person?"))return;
+try{await dbr.collection("people").doc(editing).delete();$("form").style.display="none"}
+catch(e){alert("Delete failed: "+(e.message||e.code))}};
+let first=SAMPLE;
+try{const s=localStorage.getItem("cotalityOrg");if(s){const d=JSON.parse(s);if(Array.isArray(d)&&d.length)first=d}}catch(_){}
+setup(first);render();
+$("note").textContent=first===SAMPLE?"Sample data shown.":"Loaded from your last upload (this browser only)";
+if(window.claude&&claude.use){
+claude.use("db").then(async db=>{
+if(!db)return;
+dbr=db;
+try{const u=await claude.use("user");canWrite=u?u.can("data.write")!==false:true}catch(_){canWrite=true}
+$("add").hidden=!canWrite;$("imp").hidden=!canWrite;
+db.collection("people").onSnapshot(snap=>{
+if(importing)return;
+if(snap.empty){live=false;setup(SAMPLE);$("note").textContent="Sample data shown. Import a sheet or add people to start."}
+else{live=true;setup(snap.docs.map(d=>({id:d.id,...d.data()})));$("note").textContent="Live shared data"}
+render()},e=>{$("note").textContent="Could not load shared data."})
+}).catch(()=>{})}
+</script>
+</body>
+</html>
